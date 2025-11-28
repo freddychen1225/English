@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Echo Speak 英語教練</title>
+    <title>Echo Speak 英語教練 V1.1</title>
     <style>
         :root {
             --primary: #54a0ff;
@@ -11,6 +11,7 @@
             --ai-bg: #feca57;
             --bg: #222f3e;
             --text: #c8d6e5;
+            --word-tag: #ff9ff3;
         }
 
         body {
@@ -39,33 +40,53 @@
         }
         .scenario-btn:active { transform: scale(0.95); }
         .emoji { font-size: 2rem; margin-bottom: 5px; }
+        .tag-label { font-size: 0.7rem; background: #ff6b6b; padding: 2px 6px; border-radius: 4px; margin-top: 5px; }
 
         /* 練習頁面 */
         #practice-page { display: none; width: 100%; max-width: 500px; flex-direction: column; align-items: center; }
         
         .chat-box {
             width: 100%; background: rgba(255,255,255,0.1);
-            border-radius: 20px; padding: 20px; margin-bottom: 20px;
-            min-height: 200px; display: flex; flex-direction: column; justify-content: center;
+            border-radius: 20px; padding: 20px; margin-bottom: 10px;
+            min-height: 180px; display: flex; flex-direction: column; justify-content: center;
+            position: relative;
         }
 
         .role-label { font-size: 0.8rem; font-weight: bold; margin-bottom: 5px; color: #8395a7; }
         .text-content { font-size: 1.4rem; font-weight: bold; line-height: 1.4; margin-bottom: 10px; }
-        .translation { font-size: 1rem; color: #ff9ff3; margin-bottom: 10px; }
+        .translation { font-size: 1rem; color: #8395a7; margin-bottom: 10px; font-style: italic; }
         
         .ai-text { color: var(--ai-bg); }
         .user-text { color: var(--primary); }
 
+        /* 單字區 */
+        .keywords-area {
+            width: 100%; display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px;
+        }
+        .word-btn {
+            background: transparent; border: 1px solid var(--word-tag); color: var(--word-tag);
+            padding: 5px 12px; border-radius: 20px; cursor: pointer; font-size: 0.9rem;
+        }
+        .word-btn:hover { background: var(--word-tag); color: #222; }
+        
+        .word-detail {
+            width: 100%; background: #2e3c4e; border-radius: 10px; padding: 10px;
+            margin-bottom: 15px; display: none; text-align: center; border-left: 4px solid var(--word-tag);
+        }
+        .kk-phonetic { color: #feca57; font-family: "Arial", sans-serif; margin: 0 10px; }
+
         /* 控制區 */
         .controls { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 15px; }
         
+        .btn-group { display: flex; gap: 20px; align-items: center; }
+
         .action-btn {
-            width: 80px; height: 80px; border-radius: 50%; border: none;
-            font-size: 2rem; cursor: pointer; display: flex; align-items: center; justify-content: center;
+            width: 70px; height: 70px; border-radius: 50%; border: none;
+            font-size: 1.8rem; cursor: pointer; display: flex; align-items: center; justify-content: center;
             box-shadow: 0 5px 15px rgba(0,0,0,0.3); transition: 0.2s;
         }
         .play-btn { background: var(--ai-bg); color: #222; }
-        .mic-btn { background: var(--primary); color: white; }
+        .mic-btn { background: var(--primary); color: white; display: none; } /* 預設隱藏 */
         .mic-btn.listening { background: #ff6b6b; animation: pulse 1s infinite; }
         
         .next-btn {
@@ -88,7 +109,7 @@
 <body>
 
     <div id="menu-page">
-        <h1>Echo Speak 🇺🇸</h1>
+        <h1>Echo Speak V1.1</h1>
         <div class="subtitle">生活情境口說教練</div>
         <div class="grid" id="scenario-grid"></div>
     </div>
@@ -103,12 +124,19 @@
             <div class="translation" id="translation-text">...</div>
         </div>
 
+        <!-- 單字按鈕區 -->
+        <div class="keywords-area" id="keywords-area"></div>
+        <!-- 單字詳情顯示 -->
+        <div class="word-detail" id="word-detail"></div>
+
         <div class="controls">
-            <!-- AI 播放按鈕 -->
-            <button class="action-btn play-btn" id="play-btn" onclick="speakText()">🔊</button>
-            
-            <!-- 用戶錄音按鈕 -->
-            <button class="action-btn mic-btn" id="mic-btn" onclick="toggleMic()" style="display:none;">🎤</button>
+            <div class="btn-group">
+                <!-- 播放按鈕 (User/AI 通用) -->
+                <button class="action-btn play-btn" id="play-btn" onclick="speakText()">🔊</button>
+                
+                <!-- 錄音按鈕 (User 專用) -->
+                <button class="action-btn mic-btn" id="mic-btn" onclick="toggleMic()">🎤</button>
+            </div>
             
             <!-- 辨識結果 -->
             <div class="result-area" id="result-text">...</div>
@@ -118,101 +146,54 @@
     </div>
 
     <script>
-        // --- 10大情境劇本資料庫 ---
+        // --- 10大情境劇本 (前兩個包含 keywords) ---
         const scenarios = [
             {
-                title: "Coffee Shop", emoji: "☕",
+                title: "Coffee Shop", emoji: "☕", hasKeywords: true,
                 dialogs: [
-                    { role: "AI", text: "Hi, are you ready to order?", trans: "嗨，準備好點餐了嗎？" },
-                    { role: "User", text: "Yes, I would like a hot latte, please.", trans: "是的，我想要一杯熱拿鐵。" },
-                    { role: "AI", text: "Sure. What size would you like?", trans: "沒問題，想要什麼尺寸？" },
-                    { role: "User", text: "Medium size, please.", trans: "中杯，謝謝。" },
-                    { role: "AI", text: "Anything else to eat?", trans: "還要吃點什麼嗎？" },
-                    { role: "User", text: "No, that's all. Thank you.", trans: "不用，這樣就好。謝謝。" }
+                    { 
+                        role: "AI", text: "Hi, are you ready to order?", trans: "嗨，準備好點餐了嗎？",
+                        keywords: [{w:"order", m:"點餐", k:"/ˈɔːrdər/"}, {w:"ready", m:"準備好", k:"/ˈredi/"}]
+                    },
+                    { 
+                        role: "User", text: "Yes, I would like a hot latte, please.", trans: "是的，我想要一杯熱拿鐵。",
+                        keywords: [{w:"latte", m:"拿鐵", k:"/ˈlɑːteɪ/"}, {w:"would like", m:"想要(禮貌)", k:"/wʊd laɪk/"}]
+                    },
+                    { 
+                        role: "AI", text: "Sure. What size would you like?", trans: "沒問題，想要什麼尺寸？",
+                        keywords: [{w:"size", m:"尺寸", k:"/saɪz/"}]
+                    },
+                    { 
+                        role: "User", text: "Medium size, please.", trans: "中杯，謝謝。",
+                        keywords: [{w:"medium", m:"中杯；中等的", k:"/ˈmiːdiəm/"}]
+                    }
                 ]
             },
             {
-                title: "Restaurant", emoji: "🍔",
+                title: "Restaurant", emoji: "🍔", hasKeywords: true,
                 dialogs: [
-                    { role: "AI", text: "Welcome! Do you have a reservation?", trans: "歡迎光臨！請問有訂位嗎？" },
-                    { role: "User", text: "No, I don't. Do you have a table for two?", trans: "沒有。請問有兩人的位子嗎？" },
-                    { role: "AI", text: "Yes, right this way. Here is the menu.", trans: "有的，這邊請。這是菜單。" },
-                    { role: "User", text: "Can we have some water, please?", trans: "請給我們一點水好嗎？" }
+                    { 
+                        role: "AI", text: "Welcome! Do you have a reservation?", trans: "歡迎光臨！請問有訂位嗎？",
+                        keywords: [{w:"reservation", m:"預約；訂位", k:"/ˌrezərˈveɪʃn/"}]
+                    },
+                    { 
+                        role: "User", text: "No, I don't. Do you have a table for two?", trans: "沒有。請問有兩人的位子嗎？",
+                        keywords: [{w:"table", m:"桌子", k:"/ˈteɪbl/"}]
+                    },
+                    { 
+                        role: "AI", text: "Yes, right this way. Here is the menu.", trans: "有的，這邊請。這是菜單。",
+                        keywords: [{w:"menu", m:"菜單", k:"/ˈmenjuː/"}, {w:"right this way", m:"這邊請", k:"phr."}]
+                    }
                 ]
             },
-            {
-                title: "Airport Check-in", emoji: "✈️",
-                dialogs: [
-                    { role: "AI", text: "Passport please. Where are you flying to?", trans: "請出示護照。你要飛往哪裡？" },
-                    { role: "User", text: "I am flying to Tokyo.", trans: "我要飛往東京。" },
-                    { role: "AI", text: "Do you have any bags to check?", trans: "有行李要託運嗎？" },
-                    { role: "User", text: "Yes, just one suitcase.", trans: "有，只有一個行李箱。" }
-                ]
-            },
-            {
-                title: "On the Plane", emoji: "🍱",
-                dialogs: [
-                    { role: "AI", text: "Chicken or Beef?", trans: "雞肉還是牛肉？" },
-                    { role: "User", text: "Chicken, please.", trans: "雞肉，謝謝。" },
-                    { role: "AI", text: "Would you like something to drink?", trans: "需要喝點什麼嗎？" },
-                    { role: "User", text: "Can I have some apple juice?", trans: "我可以要一些蘋果汁嗎？" }
-                ]
-            },
-            {
-                title: "Immigration", emoji: "🛂",
-                dialogs: [
-                    { role: "AI", text: "What is the purpose of your visit?", trans: "你此行的目的是什麼？" },
-                    { role: "User", text: "I am here for tourism.", trans: "我是來觀光的。" },
-                    { role: "AI", text: "How long will you stay?", trans: "你會停留多久？" },
-                    { role: "User", text: "I will stay for five days.", trans: "我會待五天。" }
-                ]
-            },
-            {
-                title: "Hotel Check-in", emoji: "🏨",
-                dialogs: [
-                    { role: "AI", text: "Good evening. How can I help you?", trans: "晚安，有什麼能為您服務？" },
-                    { role: "User", text: "Hi, I have a reservation under Chen.", trans: "嗨，我有訂房，姓陳。" },
-                    { role: "AI", text: "Okay. Here is your key card.", trans: "好的。這是您的房卡。" },
-                    { role: "User", text: "Does the room have free Wifi?", trans: "房間有免費無線網路嗎？" }
-                ]
-            },
-            {
-                title: "Supermarket", emoji: "🛒",
-                dialogs: [
-                    { role: "User", text: "Excuse me, where can I find milk?", trans: "不好意思，請問牛奶在哪裡？" },
-                    { role: "AI", text: "It's in Aisle 3, next to the yogurt.", trans: "在第3走道，優格旁邊。" },
-                    { role: "AI", text: "Cash or card?", trans: "付現還是刷卡？" },
-                    { role: "User", text: "I will pay by credit card.", trans: "我要刷卡。" }
-                ]
-            },
-            {
-                title: "Asking Directions", emoji: "🗺️",
-                dialogs: [
-                    { role: "User", text: "Excuse me, how do I get to the station?", trans: "不好意思，請問車站怎麼走？" },
-                    { role: "AI", text: "Go straight and turn left at the corner.", trans: "直走，然後在轉角左轉。" },
-                    { role: "User", text: "Is it far from here?", trans: "離這裡遠嗎？" },
-                    { role: "AI", text: "No, it's about a five-minute walk.", trans: "不遠，走路大約五分鐘。" }
-                ]
-            },
-            {
-                title: "Shopping", emoji: "👕",
-                dialogs: [
-                    { role: "AI", text: "Can I help you find anything?", trans: "需要幫忙找什麼嗎？" },
-                    { role: "User", text: "Yes, can I try this on?", trans: "有的，我可以試穿這件嗎？" },
-                    { role: "AI", text: "Sure, the fitting room is over there.", trans: "當然，試衣間在那邊。" },
-                    { role: "User", text: "Do you have this in a larger size?", trans: "這件有大一點的尺寸嗎？" }
-                ]
-            },
-            {
-                title: "Taking a Taxi", emoji: "🚕",
-                dialogs: [
-                    { role: "AI", text: "Where to?", trans: "要去哪裡？" },
-                    { role: "User", text: "To the Hilton Hotel, please.", trans: "請去希爾頓飯店。" },
-                    { role: "User", text: "How much is the fare?", trans: "車資多少錢？" },
-                    { role: "AI", text: "It's twenty dollars.", trans: "20元。" },
-                    { role: "User", text: "Here you go. Keep the change.", trans: "給你。不用找了。" }
-                ]
-            }
+            { title: "Airport Check-in", emoji: "✈️", dialogs: [{ role: "AI", text: "Passport please.", trans: "請出示護照。" }] },
+            { title: "On the Plane", emoji: "🍱", dialogs: [{ role: "AI", text: "Chicken or Beef?", trans: "雞肉或牛肉？" }] },
+            { title: "Immigration", emoji: "🛂", dialogs: [{ role: "AI", text: "Purpose of visit?", trans: "入境目的？" }] },
+            { title: "Hotel Check-in", emoji: "🏨", dialogs: [{ role: "AI", text: "Checking in?", trans: "辦理入住嗎？" }] },
+            { title: "Supermarket", emoji: "🛒", dialogs: [{ role: "User", text: "Where is the milk?", trans: "牛奶在哪？" }] },
+            { title: "Asking Directions", emoji: "🗺️", dialogs: [{ role: "User", text: "Where is the station?", trans: "車站怎麼走？" }] },
+            { title: "Shopping", emoji: "👕", dialogs: [{ role: "User", text: "Can I try this on?", trans: "可以試穿嗎？" }] },
+            { title: "Taking a Taxi", emoji: "🚕", dialogs: [{ role: "User", text: "To the Hilton, please.", trans: "去希爾頓飯店。" }] }
         ];
 
         // --- 程式邏輯 ---
@@ -221,24 +202,26 @@
         let recognition;
         let isListening = false;
 
-        // 初始化首頁
         window.onload = function() {
             const grid = document.getElementById('scenario-grid');
             scenarios.forEach((s, index) => {
                 const btn = document.createElement('button');
                 btn.className = 'scenario-btn';
-                btn.innerHTML = `<div class="emoji">${s.emoji}</div><div>${s.title}</div>`;
+                // 如果有單字功能，加個小標籤
+                let tag = s.hasKeywords ? '<div class="tag-label">含單字卡</div>' : '';
+                btn.innerHTML = `<div class="emoji">${s.emoji}</div><div>${s.title}</div>${tag}`;
                 btn.onclick = () => startScenario(index);
                 grid.appendChild(btn);
             });
+            initSpeech();
+        };
 
-            // 初始化語音辨識
+        function initSpeech() {
             if ('webkitSpeechRecognition' in window) {
                 recognition = new webkitSpeechRecognition();
                 recognition.continuous = false;
                 recognition.interimResults = true;
                 recognition.lang = 'en-US';
-
                 recognition.onresult = function(event) {
                     let transcript = '';
                     for (let i = event.resultIndex; i < event.results.length; ++i) {
@@ -246,15 +229,14 @@
                     }
                     document.getElementById('result-text').innerText = transcript;
                 };
-
                 recognition.onend = function() {
                     isListening = false;
                     document.getElementById('mic-btn').classList.remove('listening');
                 };
             } else {
-                alert("您的瀏覽器不支援語音辨識，請使用 Chrome 或 Safari。");
+                alert("請使用 Chrome 或 Safari 以支援語音功能。");
             }
-        };
+        }
 
         function startScenario(index) {
             currentScenario = scenarios[index];
@@ -266,6 +248,12 @@
         }
 
         function loadLine() {
+            // 確保資料結構完整 (防止後面沒擴充的情境報錯)
+            if (!currentScenario.dialogs[currentLineIndex]) {
+                // 若該情境只有一行簡單資料，這裡做個防呆
+                currentScenario.dialogs = [{ role: "System", text: "更多內容建置中...", trans: "Coming Soon..." }];
+            }
+
             const line = currentScenario.dialogs[currentLineIndex];
             const roleLabel = document.getElementById('role-label');
             const displayText = document.getElementById('display-text');
@@ -273,38 +261,64 @@
             const playBtn = document.getElementById('play-btn');
             const micBtn = document.getElementById('mic-btn');
             const resultText = document.getElementById('result-text');
+            const kwArea = document.getElementById('keywords-area');
+            const wordDetail = document.getElementById('word-detail');
 
             roleLabel.innerText = line.role;
             displayText.innerText = line.text;
             transText.innerText = line.trans;
             resultText.innerText = "...";
+            wordDetail.style.display = 'none'; // 隱藏單字解釋
 
-            // 根據角色切換 UI
+            // 1. 渲染單字卡
+            kwArea.innerHTML = "";
+            if (line.keywords) {
+                line.keywords.forEach(k => {
+                    const kBtn = document.createElement('button');
+                    kBtn.className = 'word-btn';
+                    kBtn.innerText = k.w;
+                    kBtn.onclick = () => showWordInfo(k);
+                    kwArea.appendChild(kBtn);
+                });
+            }
+
+            // 2. 角色 UI 切換
+            // 無論是 AI 或 User，現在都有 Play 按鈕 (Feature Request #1)
             if (line.role === 'AI') {
                 roleLabel.style.color = '#feca57';
                 displayText.className = 'text-content ai-text';
                 playBtn.style.display = 'flex';
-                micBtn.style.display = 'none';
-                // 自動播放太干擾，改成手動點擊播放
+                micBtn.style.display = 'none'; // AI 回合不用錄音
             } else {
                 roleLabel.style.color = '#54a0ff';
                 displayText.className = 'text-content user-text';
-                playBtn.style.display = 'none';
+                playBtn.style.display = 'flex'; // User 回合也可以聽示範發音
                 micBtn.style.display = 'flex';
             }
+        }
+
+        function showWordInfo(k) {
+            const detail = document.getElementById('word-detail');
+            detail.style.display = 'block';
+            detail.innerHTML = `
+                <div style="font-size:1.2rem; font-weight:bold; color:#fff;">${k.w}</div>
+                <div style="margin:5px 0;">
+                    <span class="kk-phonetic">[ ${k.k} ]</span>
+                    <span style="color:#ccc;">${k.m}</span>
+                </div>
+            `;
         }
 
         function speakText() {
             const text = currentScenario.dialogs[currentLineIndex].text;
             const utterance = new SpeechSynthesisUtterance(text);
             utterance.lang = 'en-US';
-            utterance.rate = 0.9; // 稍微慢一點點
+            utterance.rate = 0.9; 
             window.speechSynthesis.speak(utterance);
         }
 
         function toggleMic() {
             if (!recognition) return;
-            
             if (isListening) {
                 recognition.stop();
                 isListening = false;
@@ -321,15 +335,19 @@
             if (currentLineIndex < currentScenario.dialogs.length) {
                 loadLine();
             } else {
-                alert("恭喜完成！Great Job! 🎉");
-                goHome();
+                if(confirm("完成對話！要再練一次嗎？\n(按取消回首頁)")) {
+                    currentLineIndex = 0;
+                    loadLine();
+                } else {
+                    goHome();
+                }
             }
         }
 
         function goHome() {
             document.getElementById('practice-page').style.display = 'none';
             document.getElementById('menu-page').style.display = 'block';
-            window.speechSynthesis.cancel(); // 停止發音
+            window.speechSynthesis.cancel();
         }
     </script>
 </body>
